@@ -1,6 +1,7 @@
 package src;
 
 import java.sql.*;
+import java.time.LocalDate;
 
 public class LibraryBookManager {
     private static final String URL = "jdbc:mysql://localhost:3306/fdc_training";
@@ -138,7 +139,46 @@ public class LibraryBookManager {
         }
     }
 
-    public static void borrow(String title) {
+    public static void borrowBook(String title, int memberId) {
+        if (!checkBookByTitle(title)) {
+            System.out.println("No Book Found:" + title);
+            return;
+        }
+        Connection con = null;
+        try {
+            con = DriverManager.getConnection(URL, USERNAME, PASSWORD);
+            PreparedStatement statement = con.prepareStatement("SELECT Books.BookID, Books.CopiesAvailable FROM Books WHERE Books.Title = ?");
+            statement.setString(1, title);
+            ResultSet resultSet = statement.executeQuery();
+            int booksAvailable = 0;
+            int bookId = 0;
+            if (resultSet.next()) {
+                booksAvailable = resultSet.getInt("CopiesAvailable");
+                bookId = resultSet.getInt("BookID");
+            }
+
+            statement = con.prepareStatement("UPDATE Books SET CopiesAvailable = ? WHERE Books.Title = ?");
+            statement.setInt(1, booksAvailable - 1);
+            statement.setString(2, title);
+            statement.execute();
+
+            statement = con.prepareStatement("INSERT INTO BorrowedBooks VALUES (?,?,?)");
+            statement.setInt(1, bookId);
+            statement.setInt(2, memberId);
+            statement.setDate(3, Date.valueOf(LocalDate.now()));
+            statement.execute();
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        } finally {
+            try {
+                con.close();
+            } catch (SQLException e) {
+                throw new RuntimeException(e);
+            }
+        }
+    }
+
+    public static void returnBook(String title) {
         if (!checkBookByTitle(title)) {
             System.out.println("Book Cannot Be Borrowed");
             return;
@@ -150,14 +190,20 @@ public class LibraryBookManager {
             statement.setString(1, title);
             ResultSet resultSet = statement.executeQuery();
             int booksAvailable = 0;
-            if (resultSet.next()){
+            int bookId = 0;
+            if (resultSet.next()) {
                 booksAvailable = resultSet.getInt("CopiesAvailable");
+                bookId = resultSet.getInt("BookID");
             }
 
-            PreparedStatement statement2 = con.prepareStatement("UPDATE Books SET CopiesAvailable = ? WHERE Books.Title = ?");
-            statement2.setInt(1, booksAvailable - 1);
-            statement2.setString(2, title);
-            statement2.execute();
+            statement = con.prepareStatement("UPDATE Books SET CopiesAvailable = ? WHERE Books.Title = ?");
+            statement.setInt(1, booksAvailable + 1);
+            statement.setString(2, title);
+            statement.execute();
+
+            statement = con.prepareStatement("DELETE FROM BorrowedBooks WHERE BookID = ?");
+            statement.setInt(1, bookId);
+            statement.execute();
         } catch (SQLException e) {
             throw new RuntimeException(e);
         } finally {
